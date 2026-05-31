@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>閾舵渤鎴樻満</title>
+<title>银河战机</title>
 <style>
   :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -93,29 +93,30 @@
 
   <div id="hud">
     <span class="hud-panel hud-score" id="score-ui">0</span>
-    <span class="hud-panel" id="wave-ui">绗?1 娉?/span>
-    <span class="hud-panel" id="life-ui">鉂わ笍 x3</span>
+    <span class="hud-panel" id="wave-ui">第 1 波</span>
+    <span class="hud-panel" id="life-ui">❤️ x3</span>
   </div>
 
   <div id="mobile-ctrl">
     <div class="dpad" id="dpad">
-      <button class="btn-up"    data-dir="up">鈻?/button>
-      <button class="btn-left"  data-dir="left">鈼€</button>
-      <button class="btn-mid">鈼?/button>
-      <button class="btn-right" data-dir="right">鈻?/button>
-      <button class="btn-down"  data-dir="down">鈻?/button>
+      <button class="btn-up"    data-dir="up">▲</button>
+      <button class="btn-left"  data-dir="left">◀</button>
+      <button class="btn-mid">◆</button>
+      <button class="btn-right" data-dir="right">▶</button>
+      <button class="btn-down"  data-dir="down">▼</button>
     </div>
   </div>
 
   <div id="overlay">
-    <h1>馃寣 閾舵渤鎴樻満</h1>
+    <h1>🌌 银河战机</h1>
     <p class="tip">
-      鏂瑰悜閿?<kbd>鈫戔啌鈫愨啋</kbd> 鎴?<kbd>W A S D</kbd> 绉诲姩<br>
-      <span style="color:#ffd740;">鈿?鑷姩寮€鐏紝鏃犻渶棰濆鎿嶄綔</span>
+      方向键 <kbd>↑↓←→</kbd> 或 <kbd>W A S D</kbd> 移动<br>
+      <span style="color:#ffd740;">⚡ 自动开火，无需额外操作</span>
     </p>
     <p class="tip" style="font-size:11px;color:#667;">
-      绉诲姩绔嚜鍔ㄦ樉绀鸿櫄鎷熸憞鏉?    </p>
-    <button id="start-btn">鍗囩┖浣滄垬</button>
+      移动端自动显示虚拟摇杆
+    </p>
+    <button id="start-btn">升空作战</button>
   </div>
 </div>
 
@@ -130,11 +131,13 @@ const waveUI   = document.getElementById('wave-ui');
 const lifeUI   = document.getElementById('life-ui');
 const dpadEl   = document.getElementById('dpad');
 
-// ==================== 铏氭嫙娓告垙涓栫晫 ====================
-const GAME_W = 400;
-let scale   = 1;
-let gameH   = 700;
-let viewX   = 0;
+// ==================== 虚拟游戏世界 ====================
+// 游戏世界宽度固定为 400 单位，高度按屏幕比例推算
+// 所有游戏逻辑坐标都在这个世界里，渲染时统一缩放
+const GAME_W = 400;    // 固定游戏宽度
+let scale   = 1;       // 游戏→屏幕 缩放比
+let gameH   = 700;     // 游戏世界高度（由屏幕决定）
+let viewX   = 0;       // 游戏区在屏幕上的 X 偏移（居中）
 let viewY   = 0;
 let viewW   = 0;
 let viewH   = 0;
@@ -142,12 +145,14 @@ let viewH   = 0;
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const dpr = 1;
+  const dpr = 1; // no DPR to keep coords simple
   canvas.width  = w;
   canvas.height = h;
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
 
+  // 游戏区高度始终撑满屏幕；宽度按比例缩放
+  // 目标比例 GAME_W : gameH ≈ 1 : 1.7
   const byW = w / GAME_W;
   const byH = h / (GAME_W * 1.7);
   scale = Math.min(byW, byH);
@@ -162,7 +167,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ==================== 闊虫晥 ====================
+// ==================== 音效 ====================
 let actx = null;
 function audioCtx() {
   if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
@@ -191,7 +196,7 @@ const S = {
   wave:  ()=>{sfx(520,'triangle',.1,.1,-200);sfx(720,'triangle',.1,.1,-300);},
 };
 
-// ==================== 娓告垙鐘舵€?====================
+// ==================== 游戏状态 ====================
 const state = {
   running: false,
   score:0, wave:1, lives:3,
@@ -199,16 +204,16 @@ const state = {
   shakeTimer:0, shakeMag:0,
 };
 
-// ==================== 鐜╁ ====================
+// ==================== 玩家 ====================
 const player = {
   x:0, y:0,
   w:40, h:48,
-  speed: 320,
+  speed: 320,     // 游戏单位/秒 → 横穿 GAME_W 约 1.25 秒
   fireCD:0, fireRate:0.13,
   engineT:0,
 };
 
-// ==================== 鏁版嵁 ====================
+// ==================== 数据 ====================
 let bullets   = [];
 let eBullets  = [];
 let enemies   = [];
@@ -216,7 +221,7 @@ let particles = [];
 let stars     = [];
 let spawnTimer=0, spawnQty=0;
 
-// ==================== 杈撳叆 ====================
+// ==================== 输入 ====================
 const keys = { up:false, down:false, left:false, right:false };
 
 window.addEventListener('keydown', e => {
@@ -235,6 +240,7 @@ window.addEventListener('keyup', e => {
   if (k==='arrowright'||k==='d') keys.right = false;
 });
 
+// 移动端虚拟摇杆
 if (dpadEl) {
   dpadEl.querySelectorAll('button[data-dir]').forEach(btn => {
     const d = btn.dataset.dir;
@@ -248,7 +254,7 @@ if (dpadEl) {
   });
 }
 
-// ==================== 鏄熺┖ ====================
+// ==================== 星空 ====================
 function initStars() {
   stars = [];
   for (let i=0;i<80;i++) {
@@ -262,7 +268,7 @@ function initStars() {
   }
 }
 
-// ==================== 鏁屼汉 ====================
+// ==================== 敌人 ====================
 const ENEMY_DEFS = {
   basic:  { hp:1, speed:150, w:36, h:36, color:'#ff5252', glow:'#ff1744', score:100, shoot:false },
   fast:   { hp:1, speed:300, w:28, h:28, color:'#ffd740', glow:'#ffab00', score:150, shoot:false },
@@ -291,9 +297,10 @@ function spawnWave(w) {
   spawnQty = 5 + w*3;
   spawnTimer = 0;
   state.wave = w;
-  waveUI.textContent = `绗?${w} 娉;
+  waveUI.textContent = `第 ${w} 波`;
   S.wave();
 
+  // 每5波出 BOSS
   if (w%5===0) {
     const boss = spawnEnemy('tank');
     boss.hp = 10 + w*2;
@@ -306,7 +313,7 @@ function spawnWave(w) {
   }
 }
 
-// ==================== 绮掑瓙 ====================
+// ==================== 粒子 ====================
 function emit(x, y, color, n=10) {
   for (let i=0;i<n;i++) {
     const a = Math.random()*Math.PI*2;
@@ -320,7 +327,7 @@ function emit(x, y, color, n=10) {
   }
 }
 
-// ==================== 纰版挒 ====================
+// ==================== 碰撞 ====================
 function rectHit(a,b) {
   return (
     a.x-a.w/2 < b.x+b.w/2 && a.x+a.w/2 > b.x-b.w/2 &&
@@ -328,11 +335,12 @@ function rectHit(a,b) {
   );
 }
 
-// ==================== 缁樺埗鍑芥暟 ====================
+// ==================== 绘制函数（全部在游戏坐标系） ====================
 function drawPlayer() {
   const {x,y,w,h,engineT} = player;
   ctx.save(); ctx.translate(x,y);
 
+  // 引擎火焰
   const ef = Math.sin(engineT*18)*3+7;
   ctx.save(); ctx.translate(0, h/2-3);
   const g1=ctx.createLinearGradient(0,0,0,ef+10);
@@ -345,10 +353,12 @@ function drawPlayer() {
   ctx.beginPath();ctx.moveTo(-5,0);ctx.lineTo(0,ef+3);ctx.lineTo(5,0);ctx.closePath();ctx.fill();
   ctx.restore();
 
+  // 光晕
   const gl=ctx.createRadialGradient(0,0,w*.2,0,0,w*.85);
   gl.addColorStop(0,'rgba(0,200,255,.3)');gl.addColorStop(1,'transparent');
   ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,w*.85,0,Math.PI*2);ctx.fill();
 
+  // 机身
   const bg=ctx.createLinearGradient(0,-h/2,0,h/2);
   bg.addColorStop(0,'#4dd0e1');bg.addColorStop(.5,'#0288d1');bg.addColorStop(1,'#01579b');
   ctx.fillStyle=bg;
@@ -357,12 +367,14 @@ function drawPlayer() {
   ctx.closePath();ctx.fill();
   ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.stroke();
 
+  // 驾驶舱
   const cg=ctx.createLinearGradient(0,-9,0,9);
   cg.addColorStop(0,'#fff');cg.addColorStop(1,'#80deea');
   ctx.fillStyle=cg;
   ctx.beginPath();ctx.ellipse(0,-3,8,11,0,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle='rgba(0,0,0,.15)';ctx.lineWidth=1;ctx.stroke();
 
+  // 翼线
   ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1;
   ctx.beginPath();
   ctx.moveTo(-w/2+4,h/3-2);ctx.lineTo(-8,h/2-4);
@@ -376,9 +388,11 @@ function drawEnemy(e) {
   const {x,y,w,h,color,glow,type,hp,maxHp} = e;
   ctx.save();ctx.translate(x,y);
 
+  // 光晕
   ctx.globalAlpha=.25;ctx.fillStyle=glow;
   ctx.beginPath();ctx.arc(0,0,w*.75,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
 
+  // 主体
   ctx.fillStyle=color;ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=2;
   ctx.beginPath();
   if (type==='tank'&&maxHp>5) {
@@ -392,8 +406,10 @@ function drawEnemy(e) {
   }
   ctx.closePath();ctx.fill();ctx.stroke();
 
+  // 核心
   ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,w*.2,0,Math.PI*2);ctx.fill();
 
+  // 血条（多血敌）
   if (maxHp>2) {
     const bw=w*1.1, bh=5;
     ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(-bw/2,h/2+8,bw,bh);
@@ -435,13 +451,14 @@ function drawStars() {
   });
 }
 
-// ==================== 鏇存柊閫昏緫 ====================
+// ==================== 更新逻辑 ====================
 function update(dt) {
   if (!state.running) return;
   if (state.invTimer>0)   state.invTimer-=dt;
   if (state.comboTimer>0) state.comboTimer-=dt; else state.combo=0;
   if (state.shakeTimer>0) state.shakeTimer-=dt;
 
+  // ---- 玩家移动 ----
   let mx=0, my=0;
   if (keys.up)    my-=1;
   if (keys.down)  my+=1;
@@ -454,6 +471,7 @@ function update(dt) {
   player.y = Math.max(player.h/2, Math.min(gameH-player.h/2, player.y));
   player.engineT += dt;
 
+  // ---- 自动开火 ----
   player.fireCD -= dt;
   if (player.fireCD<=0) {
     player.fireCD = player.fireRate;
@@ -461,11 +479,13 @@ function update(dt) {
     S.shoot();
   }
 
+  // ---- 子弹移动 ----
   for (const b of bullets) b.y += b.vy*dt;
   bullets = bullets.filter(b=>b.y>-20);
   for (const b of eBullets) { b.y+=b.vy*dt; b.x+=(b.vx||0)*dt; }
   eBullets = eBullets.filter(b=>b.y<gameH+20&&b.y>-20&&b.x>-20&&b.x<GAME_W+20);
 
+  // ---- 敌人更新 ----
   for (const e of enemies) {
     if (!e.alive) continue;
     e.timer+=dt; e.shootCD-=dt;
@@ -473,6 +493,7 @@ function update(dt) {
     if (e.pattern==='zigzag') e.x += Math.sin(e.timer*3)*e.speed*0.8*dt*e.zigDir;
     if (e.y>gameH+60&&e.y>0) { e.alive=false; state.combo=0; }
 
+    // 敌人射击
     if (e.shoot&&e.shootCD<=0&&e.y>0&&e.y<gameH) {
       e.shootCD = Math.max(.32, 2.0-state.wave*.07);
       const dx=player.x-e.x, dy=player.y-e.y;
@@ -482,6 +503,7 @@ function update(dt) {
     }
   }
 
+  // ---- 碰撞: 子弹 vs 敌人 ----
   for (const b of bullets) {
     if (!b.alive) continue;
     for (const e of enemies) {
@@ -502,6 +524,7 @@ function update(dt) {
   }
   bullets = bullets.filter(b=>b.alive);
 
+  // ---- 碰撞: 敌人子弹 vs 玩家 ----
   if (state.invTimer<=0) {
     for (const b of eBullets) {
       if (!b.alive) continue;
@@ -512,6 +535,7 @@ function update(dt) {
   }
   eBullets = eBullets.filter(b=>b.alive);
 
+  // ---- 碰撞: 敌机撞击 ----
   if (state.invTimer<=0) {
     for (const e of enemies) {
       if (!e.alive) continue;
@@ -522,11 +546,14 @@ function update(dt) {
   }
   enemies = enemies.filter(e=>e.alive);
 
+  // ---- 粒子 ----
   for (const p of particles) { p.x+=p.vx*dt; p.y+=p.vy*dt; p.age+=dt; }
   particles = particles.filter(p=>p.age<p.life);
 
+  // ---- 星空 ----
   for (const s of stars) { s.y+=s.speed*dt*35; if (s.y>gameH+5){s.y=-5;s.x=Math.random()*GAME_W;} }
 
+  // ---- 敌人生成 ----
   if (spawnQty>0) {
     spawnTimer-=dt;
     if (spawnTimer<=0) {
@@ -541,12 +568,13 @@ function update(dt) {
     }
   }
 
+  // 波次结束
   if (spawnQty<=0&&enemies.length===0) { state.wave++; spawnWave(state.wave); }
 }
 
 function hitPlayer() {
   state.lives--; state.invTimer=2; state.shakeTimer=.25; state.shakeMag=10; state.combo=0;
-  S.damage(); lifeUI.textContent='鉂わ笍 x'+Math.max(0,state.lives);
+  S.damage(); lifeUI.textContent='❤️ x'+Math.max(0,state.lives);
   emit(player.x,player.y,'#00e5ff',20);
   if (state.lives<=0) gameOver();
 }
@@ -554,21 +582,25 @@ function hitPlayer() {
 function gameOver() {
   state.running=false;
   overlay.classList.remove('off');
-  overlay.querySelector('h1').textContent='馃挜 鍧犳瘉';
+  overlay.querySelector('h1').textContent='💥 坠毁';
   overlay.querySelector('.tip').innerHTML=`
-    鏈€缁堝緱鍒? <span style="color:#ffd740;font-size:22px;">${state.score}</span><br>
-    鍒拌揪绗?<span style="color:#ff9800;">${state.wave}</span> 娉?  `;
-  startBtn.textContent='鍐嶆鍗囩┖';
+    最终得分: <span style="color:#ffd740;font-size:22px;">${state.score}</span><br>
+    到达第 <span style="color:#ff9800;">${state.wave}</span> 波
+  `;
+  startBtn.textContent='再次升空';
 }
 
-// ==================== 娓叉煋 ====================
+// ==================== 渲染 ====================
 function render() {
+  // 清屏
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle='#060612';
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
+  // 进入游戏坐标
   ctx.setTransform(scale,0,0,scale,viewX,viewY);
 
+  // 屏幕震动
   let sx=0,sy=0;
   if (state.shakeTimer>0) {
     const m=state.shakeMag*(state.shakeTimer/.25);
@@ -576,6 +608,7 @@ function render() {
   }
   ctx.translate(sx,sy);
 
+  // 游戏背景
   ctx.fillStyle='#08081c';
   ctx.fillRect(0,0,GAME_W,gameH);
 
@@ -586,21 +619,25 @@ function render() {
   if (state.invTimer<=0||Math.floor(state.invTimer*10)%2===0) drawPlayer();
   particles.forEach(drawParticle);
 
+  // 回到屏幕坐标画边框
   ctx.setTransform(1,0,0,1,0,0);
+  // 两侧暗色遮罩
   if (viewX>0) { ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(0,0,viewX,canvas.height); }
   const re = viewX+viewW;
   if (re<canvas.width) { ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(re,0,canvas.width-re,canvas.height); }
+  // 游戏区边界
   ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1;
   ctx.strokeRect(viewX,viewY,viewW,canvas.height);
 }
 
-// ==================== 涓诲惊鐜?====================
+// ==================== 主循环 ====================
 let lastT=0;
 function loop(ts) {
   requestAnimationFrame(loop);
   const dt=Math.min((ts-lastT)/1000,.1); lastT=ts;
   if (state.running) { resize(); update(dt); render(); }
   else {
+    // 待机星空
     ctx.setTransform(1,0,0,1,0,0);
     ctx.fillStyle='#060612'; ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.setTransform(scale,0,0,scale,viewX,viewY);
@@ -612,7 +649,7 @@ function loop(ts) {
   }
 }
 
-// ==================== 閲嶇疆 ====================
+// ==================== 重置 ====================
 function reset() {
   resize();
   player.x = GAME_W/2;
@@ -626,7 +663,7 @@ function reset() {
   state.running=true;
 
   scoreUI.textContent='0'; scoreUI.style.color='#ffd740';
-  waveUI.textContent='绗?1 娉?; lifeUI.textContent='鉂わ笍 x3';
+  waveUI.textContent='第 1 波'; lifeUI.textContent='❤️ x3';
 
   initStars(); spawnWave(1);
   overlay.classList.add('off');
