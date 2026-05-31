@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Select-String -Path 'E:\\\\xiangmu\\\\fps-game.html' -Pattern 'dpr|canvas\\\\.\\(width|height\\)' | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })"
+    ]
+  }
+}
